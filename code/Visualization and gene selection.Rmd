@@ -1,0 +1,302 @@
+---
+title: "visualization"
+author: "TL"
+date: "1/11/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import results file from two analysis
+
+```{r import results file from old and new analysis}
+
+read_excel_allsheets <- function(filename, tibble = FALSE) {
+    sheets <- readxl::excel_sheets(filename)
+    x <- lapply(sheets, function(X) readxl::read_excel(filename, sheet = X))
+    if(!tibble) x <- lapply(x, as.data.frame)
+    names(x) <- sheets
+    x
+}
+
+theme <- theme(text=element_text(size=9),
+               axis.text.x=element_text(color="black", angle = 90, vjust = 0.3, hjust = 0.3),
+               axis.text.y=element_text(color="black"),
+               axis.ticks.x.bottom=element_blank(),
+               #axis.ticks.length.x=unit(-.25, "cm"),
+               strip.background = element_rect(colour=NA, fill=NA),
+               plot.background = element_blank(),
+               #panel.grid.major = element_blank(),
+               #panel.grid.minor = element_blank(),
+               panel.spacing.x=unit(.5, "lines"),
+               panel.border = element_rect(color = "black", fill = NA, size = 1),
+               axis.line.x = element_line(size=0.4),
+               axis.line.y = element_line(size=0.4),
+               legend.key.size = unit(2, 'lines'),
+               panel.background = element_blank()
+)
+
+new <- read_excel_allsheets("/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_A6_E3_removed_GSEA_hallmark_20220529.xlsx")
+new <- new[[1]]
+
+deg <- read_excel_allsheets("/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_activator_comparison_sig01_20220706.xlsx")
+deg <- deg[[1]]
+
+markers <- read.csv2("/Users/tili/Desktop/STAT_ovary/results/tables/cell_type_markers.csv")
+
+mark <- final_all[match(markers$gene, final_all$external_gene_name),] %>% na.omit()
+
+tnfa <- new[1,]$core_enrichment %>% str_split("/") %>% as.data.frame() %>% 'colnames<-' ("gene")
+tnf <- merge(tnfa, final_all, by.x="gene", by.y="external_gene_name", all.x=T, all.y=F) %>% select(gene, geneid)
+acti <- dds@assays@data@listData$counts %>% as.data.frame()
+acti$geneid <- rownames(acti)
+acti <- merge(acti, output, by.x="geneid", by.y="ensembl_gene_id", all.x=T, all.y=F)
+acti <- acti[,c(2:26,28)]
+write.table(acti, file = "acti.txt")
+```
+
+## Intersect between old and new analysis
+
+```{r Intersect between old and new analysis}
+
+for (i in 1:length(new)) {
+  new_ana <- new[[i]]$external_gene_name
+  old_ana <- old_no[[i]]$external_gene_name
+  print(paste0("Checked DEGs for ", names(new[i])))
+  print(intersect(new_ana, old_ana))
+}
+
+
+for (i in 1:length(new_con)) {
+  new_ana <- new_con[[i]]$external_gene_name
+  old_ana <- old_con[[i]]$external_gene_name
+  print(paste0("Checked DEGs for ", names(new[i])))
+  print(intersect(new_ana, old_ana))
+}
+
+new_all <- data.frame()
+for (i in 1:length(new)) {
+  tmp <- new[[i]] %>% select(external_gene_name, entrezgene_id)
+  new_all <- rbind(new_all, tmp)
+}
+
+MEHP_all <- data.frame()
+for (i in 1:length(MEHP)) {
+  tmp <- MEHP[[i]] %>% select(symbol, entrez)
+  MEHP_all <- rbind(MEHP_all, tmp)
+}
+
+df <- intersect(new_all$external_gene_name, old_all$external_gene_name)
+
+for (i in 1:length(new)) {
+  if (df %in% new[[i]]$external_gene_name) {
+    print(paste0(df[df %in% new[[i]]$external_gene_name], " in ", names(new[i])))
+  } else {
+    print("no repeated DEGs")
+  }
+}
+
+VennDiagram::venn.diagram(
+  x = list(na.omit(deg$external_gene_name), na.omit(final$external_gene_name)),
+  category.names = c("activator" , "cultured"),
+  filename = 'Venn for fresh and activator overlap.png',
+  output=TRUE,
+  # Circles
+        lwd = 2,
+        col=c("#A58AFF","#53B400"),
+        fill = c(alpha("#A58AFF",1),alpha("#53B400",1)),
+        scaled = T,
+        cex = 1.5,
+        fontface = "bold",
+        fontfamily = "sans",
+        # Set names
+        cat.cex = 0.8,
+        cat.fontface = "bold",
+        cat.default.pos = "outer",
+        cat.fontfamily = "sans",
+        cat.col =  c("#A58AFF","#53B400")
+)
+
+VennDiagram::venn.diagram(
+  x = list(na.omit(new_all$external_gene_name), na.omit(MEHP_all$symbol)),
+  category.names = c("new" , "MEHP"),
+  filename = 'Venn for new old overlap sig01.png',
+  output=TRUE,
+  # Circles
+        lwd = 2,
+        col=c("#A58AFF","#53B400"),
+        fill = c(alpha("#A58AFF",1),alpha("#53B400",1)),
+        scaled = T,
+        cex = 1.5,
+        fontface = "bold",
+        fontfamily = "sans",
+        # Set names
+        cat.cex = 0.8,
+        cat.fontface = "bold",
+        cat.default.pos = "outer",
+        cat.fontfamily = "sans",
+        cat.col =  c("#A58AFF","#53B400")
+)
+
+intersect(new_all$external_gene_name, MEHP_all$symbol)
+
+```
+
+## Genes in the enriched gene sets from limma analyis
+
+```{r enriched gene sets}
+
+enriched <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gsea_hallmark_relevant only_20220111.xlsx")
+
+# Get individual genes from enriched gene sets and assign the group and hallmark id
+genes <- data.frame()
+for (i in 1:length(enriched)) {
+  tmp <- enriched[[i]]  
+    for (j in 1:nrow(tmp)) {
+      tmp1 <- str_split(tmp[j,]$core_enrichment, "/") %>% as.data.frame() %>% 
+        'colnames<-' ("gene")
+      tmp1 <- tmp1 %>% 
+        mutate(id = rep(tmp[j,]$Description, nrow(tmp1))) %>% 
+        mutate(group = rep(names(enriched[i]), nrow(tmp1)))
+      genes <- rbind(genes, tmp1)
+    }
+}
+
+names(new) <- str_replace_all(names(new), "-", ".")
+
+# Check overlapping genes between genes from enriched gene set and DEGs 
+for (i in 1:length(new)) {
+    tmp <- genes %>% dplyr::filter(group == names(new[i]))
+    tmp1 <- new[[i]] %>% dplyr::filter(abs(log2FoldChange) < 15)
+    print(paste0("DEGs in enriched gene sets for ", names(new[i]), " :"))
+    print(intersect(tmp$gene, tmp1$external_gene_name))
+}
+
+openxlsx::write.xlsx(genes, "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gsea_hallmark_overlap_20220111.xlsx")
+
+intersect(genes$gene, new_con_all$external_gene_name)
+
+```
+
+## Plot individual gene expression
+
+```{r individual gene plotting}
+
+plot_gene <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gsea_hallmark_overlap_20220111.xlsx")
+
+gene_list <- plot_gene[3:4]
+
+# Remove duplicated genes in the list
+plot_g <- lapply(gene_list, function(x){
+  x <- unique(x)
+})
+
+for (i in 1: length(plot_g)) {
+  plot_g[[i]] <- new_all[match(plot_g[[i]]$gene, new_all$external_gene_name),]
+}
+
+# Get the ensembl id for each gene
+for (i in 1:length(plot_g)){
+  for (j in 1:nrow(plot_g[[i]])) {
+    tmp <- bitr(plot_g[[i]][j,1], fromType = "SYMBOL", toType = "ENSEMBL", OrgDb = org.Hs.eg.db)$ENSEMBL
+    if (length(tmp) == 1) {
+      plot_g[[i]][j,2] <- tmp
+    } else {
+        plot_g[[i]][j,2] <- tmp[1]
+        plot_g[[i]][j,3] <- tmp[2]
+    }
+  }  
+}
+
+# Plot DES group genes
+des <- list()
+for (i in 1: nrow(tnfsig)) {
+  geneID <- tnfsig[i,2]
+  gene_name <- tnfsig[i,1]
+  d2 <- plotCounts(dds, gene=geneID, intgroup=c("Activator", "Culture"), normalized = T,
+                  returnData=TRUE) 
+  des[[gene_name]] <- ggplot(d2, aes(x=Activator, y=count, fill = Activator)) + 
+    geom_boxplot()  + 
+    geom_point(size=2, alpha = 0.5) + xlab("") + ylab("normalized count") +
+    theme + ggtitle(gene_name) +
+    scale_fill_manual(values=c("#f0f0f0", "#b3cde3"))
+}
+wrap_plots(ncol = 3, nrow = 3, plotlist = des[1:9]) 
+
+pdf("/Users/tili/Desktop/STAT_ovary/results/figures/Activator_DEGs_20220609.pdf")
+for (i in 1:length(des)){
+  print(des[[i]])
+}
+dev.off()
+
+
+d2 <- plotCounts(dds, gene="ENSG00000099194", intgroup=c("Culture", "culture"), normalized = T,
+                  returnData=TRUE) 
+ggplot(d2, aes(x=culture, y=count, fill = culture)) + 
+    geom_boxplot()  + 
+    geom_point(size=2, alpha = 0.5) + xlab("") + ylab("normalized count") +
+    theme + ggtitle("SCD") +
+    scale_fill_manual(values=c("#f0f0f0", "#b3cde3"))
+
+# Plot marker genes
+des <- list()
+for (i in 1: nrow(mark)) {
+  geneID <- mark[i,1]
+  gene_name <- mark[i,9]
+  d2 <- plotCounts(dds, gene=geneID, intgroup=c("culture"), normalized = T,
+                  returnData=TRUE) 
+  des[[gene_name]] <- ggplot(d2, aes(x=culture, y=count, fill = culture)) + 
+    geom_boxplot()  + 
+    geom_point(size=2, alpha = 0.5) + xlab("") + ylab("normalized count") +
+    theme + ggtitle(gene_name) +
+    scale_fill_manual(values=c("#f0f0f0", "#b3cde3"))
+}
+
+pdf("/Users/tili/Desktop/STAT_ovary/results/figures/cell_type_markers_fresh_cultured_20220708.pdf")
+for (i in 1:length(des)){
+  print(des[[i]])
+}
+dev.off()
+
+save(des, ktz, file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/individual_gene_plot_20220111.Rdata")
+
+load("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/individual_gene_plot_20220111.Rdata")
+
+des[["ASAH1"]] + des[["RHOA"]] + des[["SCD"]] + des[["MAPKAP1"]] + 
+  des[["SGO2"]] + des[["CTNNB1"]] + plot_annotation(tag_levels = "A") + plot_layout(guides = "collect")
+
+```
+
+```{r gsea limma result plotting}
+
+gse <- read_excel_allsheets("/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/tables/DESeq2_x868_removed_gsea_hallmark_relevant only_20220111.xlsx")
+
+gse_df <- data.frame()
+for (i in 1:length(gse)) {
+  tmp <- gse[[i]] %>% mutate(group = rep(names(gse[i]), nrow(gse[[i]])))
+  gse_df <- rbind(gse_df, tmp) 
+}
+
+gse_df$status <- ifelse(gse_df$NES > 0, "up", "down")
+gse_df$chemical <- ifelse(str_detect(gse_df$group, "DES"), "DES", "KTZ")
+gse_df$group <- factor(gse_df$group, levels = c("COV434_DES_10.10M", "COV434_DES_10.6M",
+                                                "KGN_DES_10.10M", "KGN_DES_10.6M",
+                                                "Primary_DES_10.10M", "Primary_DES_10.6M",
+                                                "COV434_KTZ_10.9M", "COV434_KTZ_10.5M",
+                                                "KGN_KTZ_10.9M", "KGN_KTZ_10.5M",
+                                                "Primary_KTZ_10.9M", "Primary_KTZ_10.5M"))
+
+for (i in 1:nrow(gse_df)) {
+  gse_df[i,ncol(gse_df)] <- length(str_split(gse_df[i, (ncol(gse_df)-4)], "/", simplify = T))
+}
+
+ggplot(gse_df, aes(x = group, y = Description, color = status)) + 
+  geom_point(aes(size = count)) + theme +
+  scale_color_manual(values = c("up" = "#f8766d", "down" = "#00ba38")) 
+
+```
+

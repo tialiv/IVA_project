@@ -1,0 +1,43 @@
+channels:
+- bioconda
+- conda-forge
+- defaults
+dependencies:
+- r-msigdbr
+- bioconductor-org.Hs.eg.db
+- bioconductor-deseq2
+- bioconductor-clusterProfiler
+- bioconductor-pathview
+- bioconductor-dose
+- bioconductor-do.db
+- bioconductor-ggtree
+- r-rvcheck=0.1.8
+- r-base
+- bioconductor-biomaRt
+- r-umap
+- r-RColorBrewer
+- r-dplyr
+- r-ggplot2
+- r-BiocManager
+- python
+- r-rmarkdown
+- r-pheatmap
+- bioconductor-apeglm 
+- r-tidyverse
+- rstudio
+- bioconductor-ensembldb
+- bioconductor-edger
+- bioconductor-limma
+- r-patchwork
+- r-venndiagram 
+- r-ggraph
+- r-matrix.utils
+- r-Matrix
+- r-openxlsx
+- bioconductor-gsva
+- bioconductor-gseabase
+- bioconductor-complexheatmap
+- bioconductor-interactivecomplexheatmap
+
+
+
