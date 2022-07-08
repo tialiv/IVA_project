@@ -1,6 +1,6 @@
 # Project 
 
-Bulk RNA sequencing project on ovarian cell lines (COV434, KGN, primary ovarian cells) after exposure to DMSO, DES 10-6M & 10-10M and KTZ 10-5M & 10-9M.
+Bulk RNA sequencing project on effects of in vitro activation and culture on adult human ovarian cortex.
 
 ## Analysis environment in R
 
