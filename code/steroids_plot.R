@@ -1,5 +1,5 @@
-setwd("/Users/tili/Desktop/STAT_ovary/")
-df <- read.csv("steroid.csv", header = TRUE, sep = ";", dec = ",")
+setwd("/Users/tili/Desktop/STAT_ovary/data/")
+df <- read.csv("Steroids_CE groups.csv", header = TRUE, sep = ";", dec = ",")
 
 library(ggplot2)
 library(stringr)
@@ -25,25 +25,36 @@ theme <- theme(text=element_text(size=15),
                panel.background = element_blank()
 )
 
-df <- na.omit(df)
+df <- df[df$Number.of.follicles != 0,]
+normalized <- data.frame(df$Biopsy.code) 
+
+for (i in 6:15) {
+  temp <- df[,c(3, i)]
+  temp <- transform(temp, nor = temp[,2] / temp[,1]) 
+  normalized <- cbind(normalized, temp$nor)
+}
+
+colnames(normalized) <- colnames(df)[c(2, 6:15)]
+normalized$IVA <- df$IVA 
+normalized$IVAs <- ifelse(str_detect(normalized$IVA, "0"), "No", "Yes")
 
 plot_list <- list()
-for (i in 5:14) {
-  temp <- df[,c(1:4,i)]
-  temp$IVA <- factor(temp$IVA, levels = c("No", "Yes"))
-  plot_list[[colnames(temp)[5]]] <- temp %>% ggplot(aes(x = IVA, y = log10(.[,5]+1), fill=IVA)) + geom_boxplot() +
-    theme  + 
-    ggtitle(colnames(temp)[5]) + ylab("Log10(Concentration+1)") + xlab("") + 
+for (i in 2:11) {
+  temp <- normalized[,c(13,i)]
+  temp[is.infinite(temp[,2]),2] <- 0
+  temp$IVAs <- factor(temp$IVAs, levels = c("No", "Yes"))
+  plot_list[[colnames(temp)[2]]] <- temp %>% ggplot(aes(x = IVAs, y = log10(.[,2]+1), fill=IVAs)) + geom_boxplot() + theme  + 
+    ggtitle(colnames(temp)[2]) + ylab("Log10(Concentration+1)") + xlab("") + 
     guides(fill = guide_legend(title = "Groups"))  +
-    scale_fill_manual(values = c("#8dd3c7","#fb8072"))
+    scale_fill_manual(values = c("#fb8072", "#8dd3c7"))
 }
-wrap_plots(plot_list, nrow = 2, ncol = 5) + plot_layout(guides = "collect")
+wrap_plots(plot_list[c(10,7,8,5,6,4)], nrow = 2, ncol = 3) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "A")
 
-for (i in 5:14) {
-  temp <- df[,c(1:4,i)]
-  temp$IVA <- factor(temp$IVA, levels = c("No", "Yes"))
-  print(colnames(temp)[5])
-  model <- lm(log10(temp[,5] + 1) ~ IVA + Age, data = temp)
-  print(summary(model))
+for (i in 2:11) {
+  temp <- normalized[,c(13,i)]
+  temp[is.infinite(temp[,2]),2] <- 0
+  temp$IVAs <- factor(temp$IVAs, levels = c("No", "Yes"))
+  print(colnames(temp)[2])
+  print(t.test(log10(temp[,2] + 1) ~ temp$IVAs))
 }
 
