@@ -52,8 +52,8 @@ suppressMessages(library(GSVA))
 ### Data from Hisat2 alignment
 
 ```{r initial data input}
-cells <- read.delim(file = "/Users/tili/Desktop/STAT_ovary/data/raw_count.txt", skip = 1)
-info <- read.csv(file = "/Users/tili/Desktop/STAT_ovary/data/info.csv", header = T, sep = ";")
+cells <- read.delim(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/data/raw_count.txt", skip = 1)
+info <- read.csv(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/data/info.csv", header = T, sep = ";")
 cells <- cells[,-c(2:6)]
 cells[is.na(cells)] <- 0  
 colnames(info) <- c("Sample", "ID", "Culture", "Activator", "Follicle")
@@ -260,28 +260,28 @@ for(i in cul){
 # Significant DEGs
 comparison05 <- list()
 for (i in 1:length(comparisonALL)) {
-  comparison05[[names(comparisonALL)[i]]] <- comparisonALL[[i]] %>% filter(pvalue<0.05)
+  comparison05[[names(comparisonALL)[i]]] <- comparisonALL[[i]] %>% filter(padj<0.05)
 }
 
 comparison001 <- list()
 for (i in 1:length(comparisonALL)) {
-  comparison001[[names(comparisonALL)[i]]] <- comparisonALL[[i]] %>% filter(pvalue<0.001)
+  comparison001[[names(comparisonALL)[i]]] <- comparisonALL[[i]] %>% filter(padj<0.001)
 }
 
 
 save(dds, comparison001, comparisonALL, 
-     file = "/Users/tili/Desktop/STAT_ovary/results/DESeq2_H1_removed_fresh_vs_cultured_IVA_included.Rdata")
+     file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_H1_removed_fresh_vs_cultured_IVA_included.Rdata")
 ```
 
 
 ## get gene names from gene id
 
 ```{r get gene names and save output}
-#ensembl <- useMart(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
-#output <- getBM(attributes=c("ensembl_gene_id","external_gene_name","entrezgene_id","description"), mart = ensembl)
-output <- read.csv2(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/mart.csv", sep = ",")
+ensembl <- useMart(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
+output <- getBM(attributes=c("ensembl_gene_id","external_gene_name","entrezgene_id","description"), mart = ensembl)
+#output <- read.csv2(file = "/Users/tianyi.li.2/Desktop/Cell_line_bulk_seq_202011/results/mart.csv", sep = ",")
 
-load(file = "/Users/tili/Desktop/STAT_ovary/results/DESeq2_H1_removed_fresh_vs_cultured_IVA_included.Rdata")
+load(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_H1_removed_fresh_vs_cultured_IVA_included.Rdata")
 
 get_id <- function(res.sig) {
   res.sig$geneid <- rownames(res.sig)
@@ -297,7 +297,7 @@ final <- lapply(comparison001, function(x) {
   x <- get_id(x)
 })
 
-openxlsx::write.xlsx(final, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_fresh_cultured_H1_removed_IVA_included_sig01_20220714.xlsx")
+openxlsx::write.xlsx(final, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_fresh_cultured_H1_removed_IVA_included_sig01_20220714.xlsx")
 
 ```
 
@@ -319,14 +319,19 @@ stat_count <- normalized_counts[id_k,]
 
 genes_k <- stat_count[,(ncol(stat_count)-2)]
 
-scaleSTAT <- scale(t(stat_count[,2:(ncol(stat_count)-4)]), scale = T, center = T) %>% t() %>%
+scaleSTAT <- scale(t(stat_count[,2:(ncol(stat_count)-3)]), scale = T, center = T) %>% t() %>%
   as.data.frame() %>% cbind(., genes_k) %>%
   cbind(., stat_df$external_gene_name) %>%
   na.omit()
 
-anno <- info %>% select(cultures, follicle)
-rownames(anno) <- info$Sample
+anno <- info %>% select(Sample, cultures, Follicle) %>% filter(cultures != "Cultured_No") 
+rownames(anno) <- anno$Sample
 STAT_scale <- scaleSTAT[,1:(ncol(scaleSTAT)-2)]
+
+genomic_idx <- match(anno$Sample, colnames(STAT_scale))
+genomic_idx
+STAT_scale <- STAT_scale[,na.omit(genomic_idx)]
+anno <- anno[,-1]
 
 pheatmap(STAT_scale, cluster_rows = T, show_rownames = F,
          cluster_cols = T, clustering_distance_rows = "correlation", annotation = anno,
@@ -397,7 +402,7 @@ all_shrunk <- lapply(shrunk, function(x) {
 })
 
 save(shrunk, shrunk_sig, 
-     file = "/Users/tili/Desktop/STAT_ovary/results/DESeq2_H1_removed_IVA_included_fresh_cultured_shrunk.Rdata")
+     file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_H1_removed_IVA_included_fresh_cultured_shrunk.Rdata")
 ```
 
 ## Get background gene list
@@ -472,7 +477,7 @@ for (i in 1:length(gse)) {
   gse[[i]] <- setReadable(gse[[i]], OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 }
 
-openxlsx::write.xlsx(gse, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_fresh_sigDEGs_enricher_hallmark_IVA_included_20220714.xlsx")
+openxlsx::write.xlsx(gse, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_fresh_sigDEGs_enricher_hallmark_IVA_included_20220714.xlsx")
 
 gsea_hallmark <- list()
 gsea_hallmark_df <- list()
@@ -492,7 +497,7 @@ for (i in 1:length(gsea_hallmark)) {
   gsea_hallmark[[i]] <- setReadable(gsea_hallmark[[i]], OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 }
 
-openxlsx::write.xlsx(gsea_hallmark, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_fresh_sigDEGs_IVA_included_GSEA_hallmark_20220714.xlsx")
+openxlsx::write.xlsx(gsea_hallmark, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_fresh_sigDEGs_IVA_included_GSEA_hallmark_20220714.xlsx")
 
 ```
 
@@ -500,9 +505,11 @@ openxlsx::write.xlsx(gsea_hallmark, "/Users/tili/Desktop/STAT_ovary/results/tabl
 
 ```{r Dotplot, fig.height=20, fig.width=10}
 
-dotplot(gsea, showCategory=22, orderBy="GeneRatio") + labs(title="gsea_hallmark")
+cultured_no <- gsea_hallmark[[1]]
+dotplot(gsea_hallmark[[1]], showCategory=22, orderBy="GeneRatio") + labs(title="gsea_hallmark")
 
-dotplot(enrich, showCategory=26, orderBy="GeneRatio") + labs(title="enricher_hallmark")
+
+dotplot(gse[[2]], showCategory=26, orderBy="GeneRatio") + labs(title="enricher_hallmark cultured yes")
 
 ```
 
@@ -533,7 +540,7 @@ enrich_KEGG <- enrichKEGG(gene = final_shrunk$entrezgene_id,
 enrich_KEGG <- setReadable(enrich_KEGG, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 enrich_KEGG_df <- enrich_KEGG %>% as.data.frame() 
 
-openxlsx::write.xlsx(enrich_KEGG_df, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_H1_removed_sigDEGs_enricher_KEGG_20220706.xlsx")
+openxlsx::write.xlsx(enrich_KEGG_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_H1_removed_sigDEGs_enricher_KEGG_20220706.xlsx")
 
 ########## Plot selected KEGG across groups ###########
 
@@ -551,7 +558,7 @@ edo <- gseKEGG(geneList = GeneList,
 edo <- setReadable(edo, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 gse_KEGG_df <- edo %>% as.data.frame()
 
-openxlsx::write.xlsx(gse_KEGG_df, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_A6_E3_removed_gse_KEGG_20220529.xlsx")
+openxlsx::write.xlsx(gse_KEGG_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_A6_E3_removed_gse_KEGG_20220529.xlsx")
 
 ```
 
@@ -567,7 +574,7 @@ ego <- enrichGO(gene = final_shrunk$entrezgene_id,
 ego <- setReadable(ego, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 enrich_GO_df <- ego %>% as.data.frame()
 
-openxlsx::write.xlsx(enrich_GO_df, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_H1_removed_fresh_enrich_GO_20220708.xlsx")
+openxlsx::write.xlsx(enrich_GO_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_H1_removed_fresh_enrich_GO_20220708.xlsx")
 
 ```
 
