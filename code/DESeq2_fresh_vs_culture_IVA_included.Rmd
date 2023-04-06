@@ -235,6 +235,7 @@ ggplot(pca, aes(PC1, PC2, color = cultures)) +
 
 ```{r perform DE analysis}
 
+#dds$cultures <- relevel(dds$cultures, ref = "Fresh_No")
 dds <- DESeq(dds)
 
 ```
@@ -301,6 +302,132 @@ openxlsx::write.xlsx(final, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/table
 
 ```
 
+## Random forest/decision tree to get the most important genes from DEGs list
+
+```{r random forest & decision tree}
+
+# get normalized counts from DESeq object for random forest classification
+df <- counts(dds, normalized = T) %>% as.data.frame()
+
+# Only use DEGs to find out the most important DEGs that separate three groups
+degs <- final[[2]]$geneid
+kgn <- kgn %>% filter(padj < 0.05)
+degs <- kgn$geneid # for activator group
+df <- df[rownames(df) %in% degs, ]
+
+# Transpose the dataset, sample should be row and column should be DEGs
+d1 <- t(df) %>% scale(center = T, scale = T) %>% as.data.frame() %>% 
+  mutate(id = rownames(.))
+info <- info %>% select(Sample, cultures)
+info <- info_activator %>% select(Sample, Activator) # for activator comparison
+
+d1 <- merge(d1, info, by.x = "id", by.y = "Sample", all.x = T, all.y = F)
+rownames(d1) <- d1$id
+d1 <- d1[, -1]
+
+d2 <- d1 %>% filter(cultures != "Cultured_Yes")
+d2 <- d1 # for activator comparison
+
+# split data into testing and training
+set.seed(100)
+inTest <- createDataPartition(y = d2$cultures, p = 0.25, list = F)
+inTest <- createDataPartition(y = d2$Activator, p = 0.25, list = F) # for activator comparison
+
+test <- d2[inTest,]
+train <- d2[-inTest,]
+
+# random forest
+train$cultures <- factor(train$cultures)
+test$cultures <- factor(test$cultures)
+
+train$Activator <- factor(train$Activator)
+test$Activator <- factor(test$Activator)
+
+class_forest <- cforest(cultures ~ ., data=train, controls = cforest_control(ntree = 50))
+pred <- predict(class_forest, newdata = test, OOB = TRUE)
+conf_matrix <- table(pred, test$cultures)
+accuracy <- sum(diag(conf_matrix))/sum(conf_matrix)
+accuracy
+
+# random forest for activator comparison
+class_forest <- cforest(Activator ~ ., data=train, controls = cforest_control(ntree = 5))
+class_forest
+pred <- predict(class_forest, newdata = test, OOB = TRUE)
+conf_matrix <- table(pred, test$Activator)
+accuracy <- sum(diag(conf_matrix))/sum(conf_matrix)
+accuracy
+
+# Plot the first 4 trees
+for (i in 1:5) {
+  pt <- prettytree(class_forest@ensemble[[i]], names(class_forest@data@get("input")))
+  nt <- new("BinaryTree")
+  nt@tree <- pt
+  nt@data <- class_forest@data
+  nt@responses <- class_forest@responses
+  plot(nt, main = paste0("Tree ", i, " from the forest"))
+}
+
+# decision tree
+class_tree <- tree(cultures ~ ., data = train)
+class_tree
+pred_full <- predict(class_tree, test)
+pred_short <- ifelse(pred_full[,"Cultured_No"] > 0.5, "Cultured_No", "Fresh_No")
+conf_matrix <- table(pred_short, test$cultures)
+conf_matrix
+
+# decision tree for activator comparison
+class_tree <- tree(Activator ~ ., data = train)
+class_tree
+pred_full <- predict(class_tree, test)
+pred_short <- ifelse(pred_full[,"Yes"] > 0.5, "Yes", "No")
+conf_matrix <- table(pred_short, test$Activator)
+conf_matrix
+
+```
+
+## Venn diagram from three group comparison
+
+```{r Venn diagram}
+
+# scale_color_manual(values = c("#8dd3c7","#fb8072","#bebada"))
+
+read_excel_allsheets <- function(filename, tibble = FALSE) {
+    sheets <- readxl::excel_sheets(filename)
+    x <- lapply(sheets, function(X) readxl::read_excel(filename, sheet = X))
+    if(!tibble) x <- lapply(x, as.data.frame)
+    names(x) <- sheets
+    x
+}
+
+kgn <- read_excel_allsheets("/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_activator_comparison_sig01_20220706.xlsx")
+kgn <- kgn[[1]]
+
+cols <- c("#8dd3c7","#fb8072")
+p1 <- VennDiagram::venn.diagram(
+  x = list(na.omit(comparison001[[1]]$geneid), na.omit(comparison001[[2]]$geneid)),
+  category.names = c("Fragmentation" , "IVA"),
+  #filename = 'Venn for fragmentation and IVA vs fresh overlap sig001.png',
+  filename = NULL,
+  output=TRUE,
+  # Circles
+        lwd = 2,
+        col=c("#8dd3c7","#fb8072"),
+        fill = c(alpha("#8dd3c7",1),alpha("#fb8072",1)),
+        scaled = F,
+        cex = 1.5,
+        fontface = "bold",
+        fontfamily = "sans",
+        # Set names
+        cat.cex = 0.8,
+        cat.fontface = "bold",
+        cat.default.pos = "outer",
+        cat.fontfamily = "sans",
+        cat.col =  c("#8dd3c7","#fb8072")
+)
+ggsave(p1, file="Venn for fragmentation and IVA vs fresh overlap sig001.svg", device = "svg")
+
+```
+
 
 ## Heatmap: DEGs expression
 
@@ -319,12 +446,13 @@ stat_count <- normalized_counts[id_k,]
 
 genes_k <- stat_count[,(ncol(stat_count)-2)]
 
-scaleSTAT <- scale(t(stat_count[,2:(ncol(stat_count)-3)]), scale = T, center = T) %>% t() %>%
+scaleSTAT <- scale(t(stat_count[,2:(ncol(stat_count)-4)]), scale = T, center = T) %>% t() %>%
   as.data.frame() %>% cbind(., genes_k) %>%
   cbind(., stat_df$external_gene_name) %>%
   na.omit()
 
 anno <- info %>% select(Sample, cultures, Follicle) %>% filter(cultures != "Cultured_No") 
+anno <- info %>% select(Sample, Culture, cultures) 
 rownames(anno) <- anno$Sample
 STAT_scale <- scaleSTAT[,1:(ncol(scaleSTAT)-2)]
 
@@ -334,7 +462,7 @@ STAT_scale <- STAT_scale[,na.omit(genomic_idx)]
 anno <- anno[,-1]
 
 pheatmap(STAT_scale, cluster_rows = T, show_rownames = F,
-         cluster_cols = T, clustering_distance_rows = "correlation", annotation = anno,
+         cluster_cols = T, clustering_distance_rows = "euclidean" , annotation = anno,
          breaks = seq(-2, 2, length.out = 90))
 
 
@@ -404,6 +532,47 @@ all_shrunk <- lapply(shrunk, function(x) {
 save(shrunk, shrunk_sig, 
      file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_H1_removed_IVA_included_fresh_cultured_shrunk.Rdata")
 ```
+
+## Fragmentation and IVA specific DEGs enrichment
+
+```{r specific DEGs enrichment}
+
+common <- intersect(final_shrunk[[1]]$geneid, final_shrunk[[2]]$geneid)
+fra <- final_shrunk[[1]]$geneid[!final_shrunk[[1]]$geneid %in% common]
+iv <- final_shrunk[[2]]$geneid[!final_shrunk[[2]]$geneid %in% common]
+
+fragment <- final_shrunk[[1]][final_shrunk[[1]]$geneid %in% fra,]
+IVA <- final_shrunk[[2]][final_shrunk[[2]]$geneid %in% iv,]
+
+genelist <- IVA %>% 
+    dplyr::select(entrezgene_id, log2FoldChange, padj) %>% 
+    mutate(logpadj = ifelse(log2FoldChange < 0, log10(padj), -log10(padj))) %>% 
+    filter(!is.na(entrezgene_id))
+GeneList <- genelist$log2FoldChange
+names(GeneList) <- as.character(genelist$entrezgene_id)
+GeneList <- sort(GeneList, decreasing = T)
+
+gsea <- GSEA(gene = GeneList, 
+                   TERM2GENE = msigHs_h,
+                   pvalueCutoff = 1,
+                   pAdjustMethod = "BH",
+                   minGSSize = 10,
+                   maxGSSize = 500)
+
+gsea <- setReadable(gsea, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+openxlsx::write.xlsx(gsea, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/GSEA_IVA_specific_hallmark_IVA_included_20230112.xlsx")
+
+enrich <- enricher(gene = IVA$entrezgene_id, 
+                   TERM2GENE = msigHs_h,
+                   pvalueCutoff = 0.1,
+                   pAdjustMethod = "BH",
+                   minGSSize = 10,
+                   maxGSSize = 500)
+enrich <- setReadable(enrich, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+openxlsx::write.xlsx(enrich, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/enrich_IVA_specific_hallmark_IVA_included_20230112.xlsx")
+
+```
+
 
 ## Get background gene list
 
@@ -498,6 +667,81 @@ for (i in 1:length(gsea_hallmark)) {
 }
 
 openxlsx::write.xlsx(gsea_hallmark, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_fresh_sigDEGs_IVA_included_GSEA_hallmark_20220714.xlsx")
+
+```
+
+## Barplot for GSEA analysis 
+
+```{r barplot for GSEA results}
+
+gse <- read_excel_allsheets("/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_fresh_sigDEGs_IVA_included_GSEA_hallmark_20220714.xlsx")
+
+gse <- gse[1:2]
+
+frag <- gse[[1]] %>% filter(p.adjust < 0.11) %>% 
+  select(ID, NES) %>% 
+  mutate(group = rep("Fragmentation", nrow(.)))
+iva <- gse[[2]] %>% filter(p.adjust < 0.11) %>% 
+  select(ID, NES) %>% 
+  mutate(group = rep("IVA", nrow(.)))
+
+iva <- iva %>% arrange(desc(NES))
+frag <- frag[match(iva$ID[-c(13, 19, 24, 25)], frag$ID),]
+
+gse_all <- rbind(iva, frag)
+gse_all <- gse_all %>% mutate(regulate = ifelse(str_detect(NES, "-"), "Down", "Up"))
+gse_all$score <- abs(gse_all$NES)
+gse_all$score[28:nrow(gse_all)] <- paste0("-", gse_all$score[28:nrow(gse_all)]) %>% as.numeric()
+gse_all$ID <- factor(gse_all$ID, levels = iva$ID)
+
+ggplot(gse_all, aes(x = ID, y = score, fill = regulate)) + 
+  geom_bar(position = "dodge", stat = "identity") +
+  geom_hline(yintercept = 0, color = "black", size = 1) +
+  coord_flip() + ylab("NES") + xlab("") +
+  ggtitle("GSEA analysis") +
+  theme(text=element_text(size=15),
+               axis.text.x=element_text(color="black", angle = 90, vjust = 0.3, hjust = 0.3),
+               axis.text.y=element_text(color="black"),
+               axis.ticks.x.bottom=element_blank(),
+               #axis.ticks.length.x=unit(-.25, "cm"),
+               strip.background = element_rect(colour=NA, fill=NA),
+               plot.background = element_blank(),
+               #panel.grid.major = element_blank(),
+               #panel.grid.minor = element_blank(),
+               panel.spacing.x=unit(.5, "lines"),
+               panel.border = element_rect(color = "black", fill = NA, size = 1),
+               axis.line.x = element_line(size=0.4),
+               axis.line.y = element_line(size=0.4),
+               legend.key.size = unit(2, 'lines'),
+               panel.background = element_blank()
+)
+
+act <- read_excel_allsheets("/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_Activator_all_DEGs_GSEA_hallmark_20220706.xlsx")
+act <- act[[1]] %>% arrange(desc(NES))
+act <- act %>% mutate(regulate = ifelse(str_detect(NES, "-"), "Down", "Up"))
+act$score <- abs(act$NES)
+act$ID <- factor(act$ID, levels = act$ID)
+
+ggplot(act, aes(x = ID, y = score, fill = regulate)) + 
+  geom_bar(position = "dodge", stat = "identity") +
+  coord_flip() + ylab("NES") + xlab("") +
+  ggtitle("GSEA analysis") +
+  theme(text=element_text(size=15),
+               axis.text.x=element_text(color="black", angle = 90, vjust = 0.3, hjust = 0.3),
+               axis.text.y=element_text(color="black"),
+               axis.ticks.x.bottom=element_blank(),
+               #axis.ticks.length.x=unit(-.25, "cm"),
+               strip.background = element_rect(colour=NA, fill=NA),
+               plot.background = element_blank(),
+               #panel.grid.major = element_blank(),
+               #panel.grid.minor = element_blank(),
+               panel.spacing.x=unit(.5, "lines"),
+               panel.border = element_rect(color = "black", fill = NA, size = 1),
+               axis.line.x = element_line(size=0.4),
+               axis.line.y = element_line(size=0.4),
+               legend.key.size = unit(2, 'lines'),
+               panel.background = element_blank()
+)
 
 ```
 

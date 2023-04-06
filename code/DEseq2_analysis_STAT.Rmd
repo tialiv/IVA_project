@@ -57,8 +57,8 @@ suppressMessages(library(GSVA))
 ### Data from Hisat2 alignment
 
 ```{r initial data input}
-cells <- read.delim(file = "/Users/tili/Desktop/STAT_ovary/data/raw_count.txt", skip = 1)
-info <- read.csv(file = "/Users/tili/Desktop/STAT_ovary/data/info.csv", header = T, sep = ";")
+cells <- read.delim(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/data/raw_count.txt", skip = 1)
+info <- read.csv(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/data/info.csv", header = T, sep = ";")
 cells <- cells[,-c(2:6)]
 cells[is.na(cells)] <- 0  
 colnames(info) <- c("Sample", "ID", "Culture", "Activator", "Follicle")
@@ -98,10 +98,10 @@ activator <- factor(c("Yes", "No"))
 culture <- factor(c("LN521", "LN221", "Matrigel", "Fresh"))
 
 info_activator <- info %>% dplyr::filter(Culture != "Fresh") %>% dplyr::filter(Culture != "LN521")
-write.csv(info_activator, file = paste("/Users/tili/Desktop/STAT_ovary/data/info_activator.csv", sep = ""))
+write.csv(info_activator, file = paste("/Users/tianyi.li.2/Desktop/STAT_ovary/data/info_activator.csv", sep = ""))
 
 cells_ordered <- re_order(info_activator, cells)
-write.csv(cells_ordered, file = paste("/Users/tili/Desktop/STAT_ovary/data/cells_activator.csv", sep = ""))
+write.csv(cells_ordered, file = paste("/Users/tianyi.li.2/Desktop/STAT_ovary/data/cells_activator.csv", sep = ""))
 
 ```
 
@@ -225,7 +225,7 @@ pheatmap(r_cor, scale = "column", show_rownames = F, annotation = df, fontsize =
 
 ```{r Outliers removed}
 # A6 and E3 were removed 
-cells <- read.delim(file = "/Users/tili/Desktop/STAT_ovary/data/raw_count.txt", skip = 1)
+cells <- read.delim(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/data/raw_count.txt", skip = 1)
 cells <- cells[,-c(2:6)]
 cells[is.na(cells)] <- 0  
 cells <- re_name(cells)
@@ -276,7 +276,7 @@ comparison05 <- comparisonALL %>% filter(padj < 0.05)
 comparison01 <- comparisonALL %>% filter(padj < 0.1)
 
 save(dds, comparison01, comparisonALL, 
-     file = "/Users/tili/Desktop/STAT_ovary/results/DESeq2_Activator.Rdata")
+     file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_Activator.Rdata")
 ```
 
 
@@ -285,9 +285,9 @@ save(dds, comparison01, comparisonALL,
 ```{r get gene names and save output}
 #ensembl <- useMart(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
 #output <- getBM(attributes=c("ensembl_gene_id","external_gene_name","entrezgene_id","description"), mart = ensembl)
-output <- read.csv2(file = "/Users/tili/Desktop/Cell_line_bulk_seq_202011/results/mart.csv", sep = ",")
+output <- read.csv2(file = "/Users/tianyi.li.2/Desktop/Cell_line_bulk_seq_202011/results/mart.csv", sep = ",")
 
-load(file = "/Users/tili/Desktop/STAT_ovary/results/DESeq2_Activator.Rdata")
+load(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_Activator.Rdata")
 
 get_id <- function(res.sig) {
   res.sig$geneid <- rownames(res.sig)
@@ -298,7 +298,7 @@ get_id <- function(res.sig) {
 final_all <- get_id(comparisonALL)
 final <- get_id(comparison01)
 
-openxlsx::write.xlsx(final, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_activator_comparison_sig01_20220706.xlsx")
+openxlsx::write.xlsx(final, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_activator_comparison_sig01_20220706.xlsx")
 
 ```
 
@@ -384,7 +384,7 @@ final_shrunk <- get_id(shrunk_sig)
 all_shrunk <- get_id(shrunk)
 
 save(shrunk, shrunk_sig, 
-     file = "/Users/tili/Desktop/STAT_ovary/results/DESeq2_Activator_shrunk.Rdata")
+     file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_Activator_shrunk.Rdata")
 ```
 
 ## Get background gene list
@@ -448,7 +448,7 @@ enrich <- setReadable(enrich, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 gse_df <- enrich %>% as.data.frame()
 gse_df
 
-openxlsx::write.xlsx(gse_df, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_Activator_all_DEGs_enricher_hallmark_20220706.xlsx")
+openxlsx::write.xlsx(gse_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_Activator_all_DEGs_enricher_hallmark_20220706.xlsx")
 
 gsea <- GSEA(gene = GeneList, 
                    TERM2GENE = msigHs_h,
@@ -460,7 +460,7 @@ gsea <- setReadable(gsea, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 gsea_hallmark_df <- gsea %>% as.data.frame() 
 gsea_hallmark_df
 
-openxlsx::write.xlsx(gsea, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_Activator_all_DEGs_GSEA_hallmark_20220706.xlsx")
+openxlsx::write.xlsx(gsea, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_Activator_all_DEGs_GSEA_hallmark_20220706.xlsx")
 
 ```
 
@@ -501,7 +501,7 @@ enrich_KEGG <- enrichKEGG(gene = final_shrunk$entrezgene_id,
 enrich_KEGG <- setReadable(enrich_KEGG, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 enrich_KEGG_df <- enrich_KEGG %>% as.data.frame() 
 
-openxlsx::write.xlsx(enrich_KEGG_df, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_Activator_enricher_KEGG_20220706.xlsx")
+openxlsx::write.xlsx(enrich_KEGG_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_Activator_enricher_KEGG_20220706.xlsx")
 
 ########## Plot selected KEGG across groups ###########
 
@@ -519,7 +519,7 @@ edo <- gseKEGG(geneList = GeneList,
 edo <- setReadable(edo, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 gse_KEGG_df <- edo %>% as.data.frame()
 
-openxlsx::write.xlsx(gse_KEGG_df, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_A6_E3_removed_gse_KEGG_20220529.xlsx")
+openxlsx::write.xlsx(gse_KEGG_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_A6_E3_removed_gse_KEGG_20220529.xlsx")
 
 ```
 
@@ -535,7 +535,7 @@ ego <- enrichGO(gene = final_shrunk$entrezgene_id,
 ego <- setReadable(ego, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
 enrich_GO_df <- ego %>% as.data.frame()
 
-openxlsx::write.xlsx(enrich_GO_df, "/Users/tili/Desktop/STAT_ovary/results/tables/DESeq2_activator_enrich_GO_20220706.xlsx")
+openxlsx::write.xlsx(enrich_GO_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_activator_enrich_GO_20220706.xlsx")
 
 ```
 
