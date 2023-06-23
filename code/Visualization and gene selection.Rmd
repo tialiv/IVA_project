@@ -33,7 +33,7 @@ theme <- theme(text=element_text(size=12),
                #panel.grid.major = element_blank(),
                #panel.grid.minor = element_blank(),
                panel.spacing.x=unit(.5, "lines"),
-               panel.border = element_rect(color = "black", fill = NA, size = 1),
+               panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
                axis.line.x = element_line(linewidth=0.4),
                axis.line.y = element_line(linewidth=0.4),
                legend.key.size = unit(2, 'lines'),
@@ -285,30 +285,45 @@ for (i in 1: nrow(gene)) {
 wrap_plots(ncol = 4, nrow = 2, plotlist = des[c(6, 4, 8, 2, 1, 3, 7, 5)]) + plot_annotation(tag_levels = "A") + plot_layout(guides = "collect") 
 
 
-d2 <- plotCounts(dds, gene="ENSG00000148795", intgroup=c("Culture", "cultures"), normalized = T,
+d2 <- plotCounts(dds, gene="ENSG00000138039", intgroup=c("Culture", "cultures"), normalized = T,
                   returnData=TRUE) 
 d2$cultures <- factor(d2$cultures, levels = c("Fresh_No", "Cultured_No", "Cultured_Yes"))
-d2 <- d2 %>% filter(cultures != "Fresh_No")
-amhr2 <- ggplot(d2, aes(x=cultures, y=count, fill = cultures)) + 
+#d2 <- d2 %>% filter(cultures != "Fresh_No")
+cdh2 <- ggplot(d2, aes(x=cultures, y=count, fill = cultures)) + 
     geom_boxplot() + 
     #geom_violin() +
     geom_point(size=2, alpha = 0.5) + 
     xlab("") + ylab("normalized count") +
     theme + 
-    ggtitle("CYP17A1") + ylim(c(0,40))
+    ggtitle("CDH2") + #ylim(c(0,40))
     scale_fill_manual(values=c("#bebada","#8dd3c7","#fb8072"))
 
 HIF1A + ENO1 + LDHA + PKM + LIF + MIF + plot_layout(ncol = 6)
 hif1a + eno1 + ldha + pkm + lif + mif + plot_layout(ncol = 6)
-star + cyp19a1 + dhcr7 + foxl2 + amhr2 + kit + pgr + egfr + inhba + plot_layout(ncol = 3) + plot_annotation(tag_levels = "A")
+foxl2 + amhr2 + cdh2 + kit + pgr + esr1 + esr2 + ar + plot_layout(ncol = 4) + plot_annotation(tag_levels = "A")
 
-d2 <- plotCounts(dds, gene="ENSG00000140459", intgroup=c("Culture", "Activator"), normalized = T,
+d2 <- plotCounts(dds, gene="ENSG00000189337", intgroup=c("Culture", "Activator"), normalized = T,
                   returnData=TRUE) 
 ggplot(d2, aes(x=Activator, y=count, fill = Activator)) + 
     geom_boxplot()  + 
     geom_point(size=2, alpha = 0.5) + xlab("") + ylab("normalized count") +
-    theme + ggtitle("INHBA") +
+    theme + ggtitle("KAZN") +
     scale_fill_manual(values=c("#8dd3c7","#fb8072"))
+
+d2 <- plotCounts(dataset[["dds_MIX"]], gene="ENSG00000159399", intgroup=c("group"), normalized = T,
+                  returnData=TRUE) 
+d2$Gro <- ifelse(str_detect(d2$group, "COV"), "COV434", 
+         ifelse(str_detect(d2$group, "KGN"), "KGN", 
+                ifelse(str_detect(d2$group, "PA"), "PA1", "Primary")))
+d2 <- d2 %>% filter(Gro == "KGN")
+ggplot(d2, aes(x=group, y=count, fill = group)) + 
+    geom_boxplot() + 
+    #geom_violin() +
+    geom_point(size=2, alpha = 0.5) + 
+    xlab("") + ylab("normalized count") +
+    theme + 
+    ggtitle("HK2") 
+
 
 # Plot marker genes
 des <- list()
