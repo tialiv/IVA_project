@@ -98,6 +98,7 @@ activator <- factor(c("Yes", "No"))
 culture <- factor(c("LN521", "LN221", "Matrigel", "Fresh"))
 
 info_activator <- info %>% dplyr::filter(Culture != "Fresh") %>% dplyr::filter(Culture != "LN521")
+# Remove replicates from the group
 info_activator <- info_activator[-c(2,14),]
 write.csv(info_activator, file = paste("/Users/tianyi.li.2/Desktop/STAT_ovary/data/info_activator.csv", sep = ""))
 

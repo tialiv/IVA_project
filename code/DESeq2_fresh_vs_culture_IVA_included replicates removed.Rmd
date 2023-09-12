@@ -44,6 +44,8 @@ suppressMessages(library(patchwork))
 suppressMessages(library(VennDiagram))
 suppressMessages(library(GSEABase))
 suppressMessages(library(GSVA))
+suppressMessages(library(caret))
+suppressMessages(library(tree))
 
 ```
 
@@ -203,21 +205,6 @@ pheatmap(r_cor, scale = "column", show_rownames = F, annotation = df, fontsize =
 
 ```
 
-## Remove outliers in heatmap
-
-```{r Outliers removed}
-# H1 was removed 
-
-info <- info[-33,]
-cells <- re_order(info, cells)
-
-dds <- DESeqDataSetFromMatrix(countData=cells, colData = info, design = ~ cultures)
-
-keep <- rowSums(counts(dds) > 1) >= 7
-dds <- dds[keep,]
-
-```
-
 ### vst normalization method in DESeq2, PCA after outlier removed
 
 ```{r PCA plot vst after outlier removed, fig.height = 4, fig.width = 6}
@@ -339,36 +326,8 @@ inTest <- createDataPartition(y = d2$Activator, p = 0.25, list = F) # for activa
 test <- d2[inTest,]
 train <- d2[-inTest,]
 
-# random forest
-train$cultures <- factor(train$cultures)
-test$cultures <- factor(test$cultures)
-
 train$Activator <- factor(train$Activator)
 test$Activator <- factor(test$Activator)
-
-class_forest <- cforest(cultures ~ ., data=train, controls = cforest_control(ntree = 50))
-pred <- predict(class_forest, newdata = test, OOB = TRUE)
-conf_matrix <- table(pred, test$cultures)
-accuracy <- sum(diag(conf_matrix))/sum(conf_matrix)
-accuracy
-
-# random forest for activator comparison
-class_forest <- cforest(Activator ~ ., data=train, controls = cforest_control(ntree = 5))
-class_forest
-pred <- predict(class_forest, newdata = test, OOB = TRUE)
-conf_matrix <- table(pred, test$Activator)
-accuracy <- sum(diag(conf_matrix))/sum(conf_matrix)
-accuracy
-
-# Plot the first 4 trees
-for (i in 1:5) {
-  pt <- prettytree(class_forest@ensemble[[i]], names(class_forest@data@get("input")))
-  nt <- new("BinaryTree")
-  nt@tree <- pt
-  nt@data <- class_forest@data
-  nt@responses <- class_forest@responses
-  plot(nt, main = paste0("Tree ", i, " from the forest"))
-}
 
 # decision tree
 train$cultures <- factor(train$cultures)
@@ -460,12 +419,12 @@ stat_count <- normalized_counts[id_k,]
 
 genes_k <- stat_count[,(ncol(stat_count)-2)]
 
-scaleSTAT <- scale(t(stat_count[,2:(ncol(stat_count)-4)]), scale = T, center = T) %>% t() %>%
+scaleSTAT <- scale(t(stat_count[,2:(ncol(stat_count)-3)]), scale = T, center = T) %>% t() %>%
   as.data.frame() %>% cbind(., genes_k) %>%
   cbind(., stat_df$external_gene_name) %>%
   na.omit()
 
-anno <- info %>% select(Sample, cultures, Follicle) %>% filter(cultures != "Cultured_No") 
+#anno <- info %>% select(Sample, cultures, Follicle) %>% filter(cultures != "Cultured_No") 
 anno <- info %>% select(Sample, Culture, cultures) 
 rownames(anno) <- anno$Sample
 STAT_scale <- scaleSTAT[,1:(ncol(scaleSTAT)-2)]
@@ -476,74 +435,12 @@ STAT_scale <- STAT_scale[,na.omit(genomic_idx)]
 anno <- anno[,-1]
 
 pheatmap(STAT_scale, cluster_rows = T, show_rownames = F,
-         cluster_cols = T, clustering_distance_rows = "euclidean" , annotation = anno,
+         cluster_cols = T, clustering_distance_rows = "euclidean", annotation = anno, clustering_distance_cols = "euclidean",
          breaks = seq(-2, 2, length.out = 90))
 
 
 ```
 
-## Heatmap for glycolysis genes
-
-```{r Glycolysis gene heatmap}
-
-glyco <- read_excel_allsheets("/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_fresh_sigDEGs_IVA_included_removed_replicates_GSEA_hallmark_20230529.xlsx")
-glyco <- glyco[[2]]
-
-# Get individual genes from enriched gene sets and assign the group and hallmark id
-tmp1 <- str_split(glyco[11,]$core_enrichment, "/") %>% as.data.frame() %>% 
-        'colnames<-' ("gene")
-
-tmp1 <- str_split(glyco[3,]$core_enrichment, "/") %>% as.data.frame() %>% 
-        'colnames<-' ("gene")
-tmp1[31:33, 1] <- c("IL2", "IL31", "TNF")
-
-gly <- normalized_counts[which(normalized_counts$external_gene_name %in% tmp1$gene),]
-
-# steroid genes
-gly <- normalized_counts[which(normalized_counts$external_gene_name %in% c("CYP11A1", "CYP17A1", "CYP19A1", "STAR", "HSD3B1",
-                                                                           "HSD3B2", "AKR1C3", "SRD5A2", "SRD5A1", 
-                                                                           "HSD11B1", "HSD11B2", "HSD17B1", "HSD17B3", "HSD17B5",
-                                                                           "DHCR7", 
-                                                                           "NR5A1" ,"INHA")),]
-
-genes_k <- gly[,(ncol(gly)-2)]
-
-scaleSTAT <- scale(t(gly[,2:(ncol(gly)-3)]), scale = T, center = T) %>% t() %>%
-  as.data.frame() %>% cbind(., genes_k) %>%
-  cbind(., gly$external_gene_name) %>%
-  na.omit()
-
-anno <- info %>% select(Sample, cultures) 
-anno <- anno[,2] %>% as.data.frame()
-rownames(anno) <- info$Sample
-colnames(anno) <- "culture"
-STAT_scale <- scaleSTAT[,1:(ncol(scaleSTAT)-2)]
-rownames(STAT_scale) <- scaleSTAT$external_gene_name
-
-pheatmap(STAT_scale, cluster_rows = T, show_rownames = T,
-         cluster_cols = T, clustering_distance_rows = "euclidean", annotation_col = anno,
-         breaks = seq(-1, 1, length.out = 90))
-
-fresh <- STAT_scale[, colnames(STAT_scale) %in% info[info$cultures == "Fresh_No",]$Sample]
-fre <- apply(fresh, 1, mean) %>% as.data.frame() %>% 
-  'colnames<-' ("Fresh")
-
-frag <- STAT_scale[, colnames(STAT_scale) %in% info[info$cultures == "Cultured_No",]$Sample]
-frag <- apply(frag, 1, mean) %>% as.data.frame() %>% 
-  'colnames<-' ("Fragmentation")
-
-iva <- STAT_scale[, colnames(STAT_scale) %in% info[info$cultures == "Cultured_Yes",]$Sample]
-iva <- apply(iva, 1, mean) %>% as.data.frame() %>% 
-  'colnames<-' ("IVA")
-
-d1 <- cbind(fre, frag)
-d1 <- cbind(d1, iva)
-
-pheatmap(d1, cluster_rows = T, show_rownames = T,
-         cluster_cols = F, clustering_distance_rows = "euclidean",
-         breaks = seq(-0.8, 0.8, length.out = 90))
-
-```
 
 ## Volcano plot
 
@@ -625,6 +522,15 @@ iv <- final_shrunk[[2]]$geneid[!final_shrunk[[2]]$geneid %in% common]
 fragment <- final_shrunk[[1]][final_shrunk[[1]]$geneid %in% fra,]
 IVA <- final_shrunk[[2]][final_shrunk[[2]]$geneid %in% iv,]
 
+msigHs_h <- msigdbr(species = "Homo sapiens", category = "H") %>%
+  dplyr::select(gs_name, entrez_gene) %>% 
+  as.data.frame()
+
+genelist <- fragment %>% 
+    dplyr::select(entrezgene_id, log2FoldChange, padj) %>% 
+    mutate(logpadj = ifelse(log2FoldChange < 0, log10(padj), -log10(padj))) %>% 
+    filter(!is.na(entrezgene_id))
+
 genelist <- IVA %>% 
     dplyr::select(entrezgene_id, log2FoldChange, padj) %>% 
     mutate(logpadj = ifelse(log2FoldChange < 0, log10(padj), -log10(padj))) %>% 
@@ -693,7 +599,6 @@ for(i in 1:length(final_shrunk)){
 msigHs_h <- msigdbr(species = "Homo sapiens", category = "H") %>%
   dplyr::select(gs_name, entrez_gene) %>% 
   as.data.frame()
-
 
 enrich <- enricher(gene = all_shrunk$entrezgene_id, 
                    TERM2GENE = msigHs_h,
@@ -822,66 +727,70 @@ ggplot(act, aes(x = ID, y = score, fill = regulate)) +
 
 ```
 
-## Dotplot for Hallmark using enricher and gsea
+## Heatmap for glycolysis genes
 
-```{r Dotplot, fig.height=20, fig.width=10}
+```{r Glycolysis gene heatmap}
 
-cultured_no <- gsea_hallmark[[1]]
-dotplot(gsea_hallmark[[1]], showCategory=22, orderBy="GeneRatio") + labs(title="gsea_hallmark")
+glyco <- read_excel_allsheets("/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_fresh_sigDEGs_IVA_included_removed_replicates_GSEA_hallmark_20230529.xlsx")
+glyco <- glyco[[2]]
 
+# Get individual genes from enriched gene sets and assign the group and hallmark id
+tmp1 <- str_split(glyco[11,]$core_enrichment, "/") %>% as.data.frame() %>% 
+        'colnames<-' ("gene")
+tmp1[35:37, 1] <- c("HIF1A", "LIF", "MIF")
 
-dotplot(gse[[2]], showCategory=26, orderBy="GeneRatio") + labs(title="enricher_hallmark cultured yes")
+tmp1 <- str_split(glyco[3,]$core_enrichment, "/") %>% as.data.frame() %>% 
+        'colnames<-' ("gene")
+tmp1[31:33, 1] <- c("IL2", "IL31", "TNF")
+
+gly <- normalized_counts[which(normalized_counts$external_gene_name %in% tmp1$gene),]
+
+# steroid genes
+gly <- normalized_counts[which(normalized_counts$external_gene_name %in% c("CYP11A1", "CYP17A1", "CYP19A1", "STAR", "HSD3B1",
+                                                                           "HSD3B2", "AKR1C3", "SRD5A2", "SRD5A1", 
+                                                                           "HSD11B1", "HSD11B2", "HSD17B1", "HSD17B3", "HSD17B5",
+                                                                           "DHCR7", 
+                                                                           "NR5A1" ,"INHA")),]
+
+genes_k <- gly[,(ncol(gly)-2)]
+
+scaleSTAT <- scale(t(gly[,2:(ncol(gly)-3)]), scale = T, center = T) %>% t() %>%
+  as.data.frame() %>% cbind(., genes_k) %>%
+  cbind(., gly$external_gene_name) %>%
+  na.omit()
+
+anno <- info %>% select(Sample, cultures) 
+anno <- anno[,2] %>% as.data.frame()
+rownames(anno) <- info$Sample
+colnames(anno) <- "culture"
+STAT_scale <- scaleSTAT[,1:(ncol(scaleSTAT)-2)]
+rownames(STAT_scale) <- scaleSTAT$external_gene_name
+
+pheatmap(STAT_scale, cluster_rows = T, show_rownames = T,
+         cluster_cols = T, clustering_distance_rows = "euclidean", annotation_col = anno,
+         breaks = seq(-1, 1, length.out = 90))
+
+fresh <- STAT_scale[, colnames(STAT_scale) %in% info[info$cultures == "Fresh_No",]$Sample]
+fre <- apply(fresh, 1, mean) %>% as.data.frame() %>% 
+  'colnames<-' ("Fresh")
+
+frag <- STAT_scale[, colnames(STAT_scale) %in% info[info$cultures == "Cultured_No",]$Sample]
+frag <- apply(frag, 1, mean) %>% as.data.frame() %>% 
+  'colnames<-' ("Fragmentation")
+
+iva <- STAT_scale[, colnames(STAT_scale) %in% info[info$cultures == "Cultured_Yes",]$Sample]
+iva <- apply(iva, 1, mean) %>% as.data.frame() %>% 
+  'colnames<-' ("IVA")
+
+d1 <- cbind(fre, frag)
+d1 <- cbind(d1, iva)
+
+pheatmap(d1, cluster_rows = T, show_rownames = T,
+         cluster_cols = F, clustering_distance_rows = "euclidean",
+         breaks = seq(-0.8, 0.8, length.out = 90))
 
 ```
 
-## Emapp plot for H
-
-```{r emap plot for Hallmark, fig.height=10, fig.width=10}
-
-test <- enrichplot::pairwise_termsim(gsea)
-emapplot(test, showCategory = 22) + ggtitle("Emap plot - GSEA")
-
-test <- enrichplot::pairwise_termsim(enrich)
-emapplot(test, showCategory = 22) + ggtitle("Emap plot - enricher")
-
-```
-
-## enrichKEGG and gseKEGG
-
-```{r enrich KEGG}
-
-enrich_KEGG <- enrichKEGG(gene = all_shrunk$entrezgene_id, 
-                       organism = 'hsa',
-                       pvalueCutoff = 0.1)
-
-enrich_KEGG <- enrichKEGG(gene = final_shrunk$entrezgene_id, 
-                       organism = 'hsa',
-                       pvalueCutoff = 0.1)
-
-enrich_KEGG <- setReadable(enrich_KEGG, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
-enrich_KEGG_df <- enrich_KEGG %>% as.data.frame() 
-
-openxlsx::write.xlsx(enrich_KEGG_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_H1_removed_sigDEGs_enricher_KEGG_20220706.xlsx")
-
-########## Plot selected KEGG across groups ###########
-
-#selected <- c("hsa04350", "hsa04928", "hsa04150", "hsa04310", "hsa04022", "hsa04024",
-#              "hsa04914", "hsa04114", "hsa04914", "hsa04919", "hsa00062", "hsa00071", 
-#              "hsa01212", "hsa01040", "hsa01212", "hsa04024", "hsa04910", "hsa04020",
-#              "hsa04010", "hsa04151")
-
-edo <- gseKEGG(geneList = GeneList, 
-                organism     = 'hsa',
-               nPerm        = 1000,
-               minGSSize    = 10,
-               pvalueCutoff = 0.1,
-               verbose      = FALSE)
-edo <- setReadable(edo, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
-gse_KEGG_df <- edo %>% as.data.frame()
-
-openxlsx::write.xlsx(gse_KEGG_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_A6_E3_removed_gse_KEGG_20220529.xlsx")
-
-```
 
 ## GO analysis
 
