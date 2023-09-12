@@ -1,6 +1,6 @@
 
 setwd("/Users/tianyi.li.2/Desktop/STAT_ovary/data/")
-df <- read.csv("Steroids_CE groups.csv", header = TRUE, sep = ";", dec = ",")
+#df <- read.csv("Steroids_CE groups.csv", header = TRUE, sep = ";", dec = ",") # Old data
 df <- read.csv("/Users/tianyi.li.2/Desktop/STAT_ovary/data/E18_steroid_results.csv", 
                stringsAsFactors = F,
                header = TRUE, sep = ";", dec = ",")
@@ -29,6 +29,8 @@ theme <- theme(text=element_text(size=15),
                panel.background = element_blank()
 )
 
+
+##################### not used in the ms ########################
 df <- df[df$Number.of.follicles != 0,]
 normalized <- data.frame(df$Biopsy.code) 
 
@@ -63,6 +65,8 @@ for (i in 2:11) {
   print(t.test(log10(temp[,2] + 1) ~ temp$IVAs))
 }
 
+
+########################### Used in the ms ######################
 # not normalized to follicle number
 plot_list <- list()
 for (i in 6:15) {
@@ -114,9 +118,57 @@ p6 <- ggplot(df, aes(x = gr, y = log10(as.numeric(E2_normalized)+1), fill=group)
 p1 + p2 + p3 + p4 + p5 + p6 + plot_annotation(tag_levels = "A") + plot_layout(ncol = 3, guides = "collect")
 
 
+ggplot(df, aes(x = gr, y = (log10(as.numeric(E2_normalized)+1)/log10(as.numeric(T_normalized)+1)), fill=group)) + 
+  geom_boxplot() + theme  + 
+  ggtitle("Estradiol/Testosterone") + ylab("Percent (%)") + xlab("") + 
+  guides(fill = guide_legend(title = "Groups")) + 
+  scale_fill_manual(values = c("#8dd3c7", "#fb8072"))
+
+ggplot(df, aes(x = gr, y = (log10(as.numeric(DHEA_normalized)+1)/log10(as.numeric(progesterone)+1)), fill=group)) + 
+  geom_boxplot() + theme  + 
+  ggtitle("DHEA/progesterone") + ylab("Percent (%)") + xlab("") + 
+  guides(fill = guide_legend(title = "Groups")) + 
+  scale_fill_manual(values = c("#8dd3c7", "#fb8072"))
+
+
 ################ Statistics ###############
 
+# Average level and standard deviation of selected steroids
+d5 <- df %>% select(gr, E2_normalized)
+d5[,2] <- as.numeric(d5[, 2])
+d5 %>% group_by(gr) %>% summarise(mean(E2_normalized))
+d5 %>% group_by(gr) %>% summarise(sd(E2_normalized))
+
+# One-way ANOVA
 d5 <- df %>% select(gr, pregnenolone)
 d5[,2] <- as.numeric(d5[, 2])
 an <- aov(log10(d5$pregnenolone + 1) ~ d5$gr)  
 TukeyHSD(an)  
+
+# Two-way ANOVA with interaction
+d5 <- df %>% select(group, Time, E2_normalized)
+d5[,3] <- as.numeric(d5[, 3])
+an <- aov(log10(d5$E2_normalized + 1) ~ d5$group + d5$Time + d5$group:d5$Time)  
+TukeyHSD(an)  
+
+###################################### Cytokine ##############################
+
+d3 <- read.csv("/Users/tianyi.li.2/Desktop/STAT_ovary/data/cytokine.csv", sep = ";", stringsAsFactors = F)
+d3$Value <- gsub(",", ".", d3$Value)
+options(digits=6)
+d3[,4] <- as.numeric(d3[, 4])
+
+# Two-way ANOVA with interaction
+d7 <- d3 %>% filter(Target == "IL2")
+an <- aov(d7$Value ~ d7$Group + d7$Time + d7$Group:d7$Time)  
+TukeyHSD(an) 
+
+# Calculate mean values of the two technical replicates
+d7 <- d7 %>% mutate(gr = paste0(Sample, "_", Group, "_", Time))
+d8 <- d7 %>% group_by(gr) %>% summarise(mean(Value))
+d8[, 3:5] <- str_split(d8$gr, "_", simplify = T)
+colnames(d8)[c(2,4:5)] <- c("Value", "Group", "Time")
+
+an <- aov(d7$Value ~ d7$Group + d7$Time + d7$Group:d7$Time)  
+TukeyHSD(an)  
+
