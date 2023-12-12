@@ -4,7 +4,7 @@
 
 # ignore intermediate, logs and scratch dirs
 results/
-data
+data/
 
 # ignore OS generated files
 .DS_Store

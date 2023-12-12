@@ -302,7 +302,7 @@ df <- counts(dds, normalized = T) %>% as.data.frame()
 degs <- final[[2]]$geneid # For IVA group
 degs <- final[[1]]$geneid # For fragmentation group
 degs <- final$geneid # for activator group
-#degs <- kgn$geneid # for activator group
+
 df <- df[rownames(df) %in% degs, ]
 
 # Transpose the dataset, sample should be row and column should be DEGs
@@ -315,7 +315,8 @@ d1 <- merge(d1, info, by.x = "id", by.y = "Sample", all.x = T, all.y = F)
 rownames(d1) <- d1$id
 d1 <- d1[, -1]
 
-d2 <- d1 %>% filter(cultures != "Cultured_Yes")
+d2 <- d1 %>% filter(cultures != "Cultured_Yes") # for frag group
+d2 <- d1 %>% filter(cultures != "Cultured_No") # for IVA group
 d2 <- d1 # for activator comparison
 
 # split data into testing and training
@@ -355,7 +356,164 @@ conf_matrix
 class_tree <- rpart(Activator ~ ., data = train)
 rpart.plot(class_tree, box.palette = "RdBu", shadow.col = "gray")
 
+# Random forest
+class_forest <- randomForest(cultures ~ ., data=train, ntree = 20)
+d5 <- importance(class_forest) %>% as.data.frame() %>% arrange(desc(.$MeanDecreaseGini))
+d5$id <- rownames(d5)
+d5 <- merge(d5, output, by.x = "id", by.y = "ensembl_gene_id", all.x = T, all.y = F)
+d5 <- d5 %>% arrange(desc(.$MeanDecreaseGini))
+
 ```
+
+## WGCNA analysis
+
+```{r WGCNA analysis}
+
+# get normalized counts from DESeq object
+df <- counts(dds, normalized = T) %>% as.data.frame()
+
+datExpr = as.data.frame(t(df)) # now samples are rows and genes are columns
+dim(datExpr)
+
+# create meta data file
+datTraits <- info
+datTraits$Fresh <- ifelse(str_detect(info$cultures, "Fresh"), 1, 0)
+datTraits$Frag <- ifelse(str_detect(info$cultures, "No"), 1, 0)
+datTraits$IVA <- ifelse(str_detect(info$cultures, "Yes"), 1, 0)
+datTraits <- datTraits[, -c(1:2)]
+
+sampleTree2 = hclust(dist(datExpr), method = "average")
+traitColors = numbers2colors(datTraits, signed = FALSE) #color represents correlation
+plotDendroAndColors(sampleTree2, traitColors,
+                    groupLabels = names(datTraits),
+                    main = "Sample dendrogram and trait heatmap")
+
+# Identify missing values and outliers
+gsg = goodSamplesGenes(datExpr, verbose = 3)
+gsg$allOK
+
+# Identify soft threshold
+powers = c(c(1:12), seq(from =10, to=30, by=1)) #choosing a set of soft-thresholding powers
+allowWGCNAThreads()
+
+sft = pickSoftThreshold(datExpr, powerVector=powers, verbose =5, networkType="signed hybrid") #call network topology analysis function
+
+sizeGrWindow(9,5)
+par(mfrow= c(1,2))
+cex1=0.9
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2], xlab= "Soft Threshold (power)", ylab="Scale Free Topology Model Fit, signed R^2", type= "n", main= paste("Scale independence"))
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2], labels=powers, cex=cex1, col="red")
+abline(h=0.90, col="red")
+plot(sft$fitIndices[,1], sft$fitIndices[,5], xlab= "Soft Threshold (power)", ylab="Mean Connectivity", type="n", main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1, col="red")
+
+#from this plot, we would choose a power of 10 because it's the lowest power for which the scale free topology index reaches 0.90; when mean connectivity equals 10, the curve starts to be flatten
+
+#build a adjacency "correlation" matrix
+enableWGCNAThreads()
+softPower = 10
+adjacency = adjacency(datExpr, power = softPower, type = "signed") #specify network type
+
+# Construct Networks
+#translate the adjacency into topological overlap matrix and calculate the corresponding dissimilarity:
+TOM = TOMsimilarity(adjacency, TOMType="signed") # specify network type
+dissTOM = 1-TOM
+
+# Generate a clustered gene tree
+geneTree = flashClust(as.dist(dissTOM), method="average")
+plot(geneTree, xlab="", sub="", main= "Gene Clustering on TOM-based dissimilarity", labels= FALSE, hang=0.04)
+#This sets the minimum number of genes to cluster into a module
+minModuleSize = 20
+dynamicMods = cutreeDynamic(dendro= geneTree, distM= dissTOM, deepSplit=2, 
+                            pamRespectsDendro= FALSE, minClusterSize = minModuleSize)
+dynamicColors= labels2colors(dynamicMods)
+MEList= moduleEigengenes(datExpr, colors= dynamicColors,softPower = softPower)
+MEs= MEList$eigengenes
+MEDiss= 1-cor(MEs)
+METree= flashClust(as.dist(MEDiss), method= "average")
+
+#plots tree showing how the eigengenes cluster together
+plot(METree, main= "Clustering of module eigengenes", xlab= "", sub= "")
+#set a threhold for merging modules. In this example we are not merging so MEDissThres=0.0
+MEDissThres = 0.0
+merge = mergeCloseModules(datExpr, dynamicColors, cutHeight= 0.12, verbose =3)
+mergedColors = merge$colors
+mergedMEs = merge$newMEs
+
+#plot dendrogram with module colors below it
+plotDendroAndColors(geneTree, cbind(dynamicColors, mergedColors), c("Dynamic Tree Cut", "Merged dynamic"), 
+                    dendroLabels= FALSE, hang=0.03, addGuide= TRUE, guideHang=0.05)
+moduleColors = mergedColors
+colorOrder = c("grey", standardColors(50))
+moduleLabels = match(moduleColors, colorOrder)-1
+MEs = mergedMEs
+
+# Correlate traits
+# Define number of genes and samples
+nGenes = ncol(datExpr)
+nSamples = nrow(datExpr)
+#Recalculate MEs with color labels
+MEs0 = moduleEigengenes(datExpr, moduleColors)$eigengenes
+MEs = orderMEs(MEs0)
+
+moduleTraitCor = cor(MEs, datTraits, use= "p")
+moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples)
+
+#Print correlation heatmap between modules and traits
+textMatrix= paste(signif(moduleTraitCor, 2), "\n(",
+                  signif(moduleTraitPvalue, 1), ")", sep= "")
+
+dim(textMatrix) = dim(moduleTraitCor)
+
+#display the corelation values with a heatmap plot
+labeledHeatmap(Matrix= moduleTraitCor,
+               xLabels= names(datTraits),
+               yLabels= names(MEs),
+               ySymbols= names(MEs),
+               colorLabels= FALSE,
+               colors= blueWhiteRed(50),
+               textMatrix= textMatrix,
+               setStdMargins= FALSE,
+               cex.text= 0.5,
+               zlim= c(-1,1),
+               sizeGrWindow(5,20),
+               main= paste("Module-trait relationships"))
+
+# Find highly correlated genes in the module
+table(moduleColors)
+module = "midnightblue"
+modNames=substring(names(MEs),3)
+column = match(module, modNames)
+moduleGenes = moduleColors==module
+geneModuleMembership=as.data.frame(cor(datExpr, MEs, use="p"))
+geneTraitSignificance=as.data.frame(cor(datExpr, datTraits, use="p"))
+verboseScatterplot(abs(geneModuleMembership[moduleGenes, column]),
+                   abs(geneTraitSignificance[moduleGenes, 1]),
+                   xlab = paste("Module Membership in", module, "module"),
+                   ylab = "Gene significance for body weight",
+                   main = paste("Module membership vs. gene significance\n"),
+                   cex.main = 1.2, cex.lab = 1.2, cex.axis = 1.2, col = module)
+
+# GO enrichment
+msigHs_h <- msigdbr(species = "Homo sapiens", category = "H") %>%
+  dplyr::select(gs_name, entrez_gene) %>% 
+  as.data.frame()
+
+d5 <- names(datExpr)[moduleColors=="darkred"] %>% as.data.frame()
+colnames(d5) <- "id"
+d5 <- merge(d5, output, by.x = "id", by.y = "ensembl_gene_id", all.x = T, all.y = F)
+
+enrich <- enricher(gene = d5$entrezgene_id, 
+                   TERM2GENE = msigHs_h,
+                   pvalueCutoff = 0.05,
+                   pAdjustMethod = "BH",
+                   minGSSize = 10,
+                   maxGSSize = 500)
+enrich <- setReadable(enrich, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+gse_df <- enrich %>% as.data.frame()
+
+```
+
 
 ## Venn diagram from three group comparison
 
