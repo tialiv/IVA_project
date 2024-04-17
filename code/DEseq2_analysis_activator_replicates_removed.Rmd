@@ -410,92 +410,27 @@ openxlsx::write.xlsx(gsea, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables
 
 ```
 
-## Dotplot for Hallmark using enricher and gsea
+## Disease gene network enrichment
 
-```{r Dotplot, fig.height=20, fig.width=10}
+```{r Disease gene network enrichment}
 
-dotplot(gsea, showCategory=22, orderBy="GeneRatio") + labs(title="gsea_hallmark")
+dgn <- gseDGN(gene = GeneList, 
+                   pvalueCutoff = 0.05,
+                   pAdjustMethod = "BH",
+                   verbose = F)
 
-dotplot(enrich, showCategory=26, orderBy="GeneRatio") + labs(title="enricher_hallmark")
+dgn <- setReadable(dgn, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+df <- dgn@result
 
-```
+openxlsx::write.xlsx(dgn, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/Activator_sigDEGs0.1_IVA_included_removed_replicates_GSEA_DGN_20240131.xlsx")
 
-## Emapp plot for H
+dgn <- read_excel_allsheets(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/Activator_sigDEGs0.1_IVA_included_removed_replicates_GSEA_DGN_20240131.xlsx")[[1]]
 
-```{r emap plot for Hallmark, fig.height=10, fig.width=10}
+acti <- dgn[c(grep("ovary", dgn$Description), grep("Ovary", dgn$Description), grep("ovarian", dgn$Description),
+             grep("Ovarian", dgn$Description)),] %>% dplyr::arrange(NES)
 
-test <- enrichplot::pairwise_termsim(gsea)
-emapplot(test, showCategory = 22) + ggtitle("Emap plot - GSEA")
+ggplot(acti, aes(x = Description, y = NES)) + geom_segment(aes(xend = Description, yend = 1)) + 
+  geom_point(aes(size = log10(p.adjust)), col = "#6dbf7d") +
+  theme_bw() + ggtitle("Frag + cIVA vs Frag") + ylim(c(1, 2.5)) + coord_flip() + xlab("")
 
-test <- enrichplot::pairwise_termsim(enrich)
-emapplot(test, showCategory = 22) + ggtitle("Emap plot - enricher")
-
-```
-
-## enrichKEGG and gseKEGG
-
-```{r enrich KEGG}
-
-enrich_KEGG <- enrichKEGG(gene = all_shrunk$entrezgene_id, 
-                       organism = 'hsa',
-                       pvalueCutoff = 0.1)
-
-enrich_KEGG <- enrichKEGG(gene = final_shrunk$entrezgene_id, 
-                       organism = 'hsa',
-                       pvalueCutoff = 0.1)
-
-enrich_KEGG <- setReadable(enrich_KEGG, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
-enrich_KEGG_df <- enrich_KEGG %>% as.data.frame() 
-
-openxlsx::write.xlsx(enrich_KEGG_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_Activator_enricher_KEGG_20220706.xlsx")
-
-########## Plot selected KEGG across groups ###########
-
-#selected <- c("hsa04350", "hsa04928", "hsa04150", "hsa04310", "hsa04022", "hsa04024",
-#              "hsa04914", "hsa04114", "hsa04914", "hsa04919", "hsa00062", "hsa00071", 
-#              "hsa01212", "hsa01040", "hsa01212", "hsa04024", "hsa04910", "hsa04020",
-#              "hsa04010", "hsa04151")
-
-edo <- gseKEGG(geneList = GeneList, 
-                organism     = 'hsa',
-               nPerm        = 1000,
-               minGSSize    = 10,
-               pvalueCutoff = 0.1,
-               verbose      = FALSE)
-edo <- setReadable(edo, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
-gse_KEGG_df <- edo %>% as.data.frame()
-
-openxlsx::write.xlsx(gse_KEGG_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_A6_E3_removed_gse_KEGG_20220529.xlsx")
-
-```
-
-## GO analysis
-
-```{r GO analysis}
-
-ego <- enrichGO(gene = final_shrunk$entrezgene_id, 
-                                                         universe = all_shrunk$entrezgene_id,
-                                                         OrgDb = org.Hs.eg.db, ont = "ALL", 
-                                                         pAdjustMethod = "BH", 
-                                                         pvalueCutoff = 0.05, readable = TRUE)
-ego <- setReadable(ego, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
-enrich_GO_df <- ego %>% as.data.frame()
-
-openxlsx::write.xlsx(enrich_GO_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_activator_enrich_GO_20220706.xlsx")
-
-```
-
-## Plot GO analysis results
-
-```{r plot GO analysis results}
-
-dotplot(ego, showCategory = 50,  orderBy="GeneRatio") +
-      ggtitle("Dotplot - enrich GO") + scale_color_continuous(low = "purple", high = "green") 
-
-
-```
-
-
-```{r Session info}
-sessionInfo()
 ```

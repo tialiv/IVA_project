@@ -263,7 +263,6 @@ save(dds, comparison001, comparisonALL,
      file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_H1_removed_fresh_vs_cultured_IVA_included_removed_replicates.Rdata")
 ```
 
-
 ## get gene names from gene id
 
 ```{r get gene names and save output}
@@ -271,7 +270,7 @@ ensembl <- useMart(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
 output <- getBM(attributes=c("ensembl_gene_id","external_gene_name","entrezgene_id","description"), mart = ensembl)
 #output <- read.csv2(file = "/Users/tianyi.li.2/Desktop/Cell_line_bulk_seq_202011/results/mart.csv", sep = ",")
 
-load(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_H1_removed_fresh_vs_cultured_IVA_included.Rdata")
+load(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_H1_removed_fresh_vs_cultured_IVA_included_removed_replicates.Rdata")
 
 get_id <- function(res.sig) {
   res.sig$geneid <- rownames(res.sig)
@@ -593,7 +592,8 @@ STAT_scale <- STAT_scale[,na.omit(genomic_idx)]
 anno <- anno[,-1]
 
 pheatmap(STAT_scale, cluster_rows = T, show_rownames = F,
-         cluster_cols = T, clustering_distance_rows = "euclidean", annotation = anno, clustering_distance_cols = "euclidean",
+         cluster_cols = T, clustering_distance_rows = "euclidean", annotation = anno, 
+         clustering_distance_cols = "euclidean",
          breaks = seq(-2, 2, length.out = 90))
 
 
@@ -652,10 +652,10 @@ for (i in 1:length(shrunk)) {
     shrunk_sig[[names(shrunk)[i]]] <- shrunk[[i]] %>% filter(padj<0.001)
 }
 
-shrunk_sig <- list()
-for (i in 1:length(shrunk)) {
-    shrunk_sig[[names(shrunk)[i]]] <- shrunk[[i]] %>% filter(padj<0.01)
-}
+#shrunk_sig <- list()
+#for (i in 1:length(shrunk)) {
+#    shrunk_sig[[names(shrunk)[i]]] <- shrunk[[i]] %>% filter(padj<0.01)
+#}
 
 final_shrunk <- lapply(shrunk_sig, function(x) {
   x <- get_id(x)
@@ -666,7 +666,7 @@ all_shrunk <- lapply(shrunk, function(x) {
 })
 
 save(shrunk, shrunk_sig, 
-     file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_H1_removed_IVA_included_fresh_cultured_shrunk.Rdata")
+     file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/DESeq2_H1_removed_IVA_included_remove_replicates_fresh_cultured_shrunk.Rdata")
 ```
 
 ## Fragmentation and IVA specific DEGs enrichment
@@ -885,6 +885,57 @@ ggplot(act, aes(x = ID, y = score, fill = regulate)) +
 
 ```
 
+## Disease gene network enrichment
+
+```{r Disease gene network enrichment}
+
+gsea_dgn <- list()
+for (i in 1:length(GeneList)){
+  print(names(GeneList)[i])
+  dgn <- gseDGN(gene = GeneList[[i]], 
+                   pvalueCutoff = 0.05,
+                   pAdjustMethod = "BH",
+                   verbose = F)
+  gsea_dgn[[names(GeneList)[i]]] <- dgn
+}
+
+for (i in 1:length(gsea_dgn)) {
+  gsea_dgn[[i]] <- setReadable(gsea_dgn[[i]], OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+}
+
+openxlsx::write.xlsx(gsea_dgn, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_fresh_cultured_sigDEGs0.001_IVA_included_removed_replicates_GSEA_DGN_20240131.xlsx")
+
+```
+
+## Plot DGN results
+
+```{r DGN results}
+
+dgn <- read_excel_allsheets(file = "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_fresh_cultured_sigDEGs0.001_IVA_included_removed_replicates_GSEA_DGN_20240131.xlsx")
+
+frag <- dgn[["Cultured_No"]]
+selected <- c("C1140680", "C4721610", "C0919267", "C0029925", "C0677886")
+frag <- frag[which(frag$ID %in% selected),] %>% dplyr::arrange(NES)
+frag$Description <- factor(frag$Description, levels = frag$Description)
+
+p1 <- ggplot(frag, aes(x = Description, y = NES)) + geom_segment(aes(xend = Description, yend = 1)) + 
+  geom_point(aes(size = log10(p.adjust)), col = "#6dbf7d") +
+  theme_bw() + ggtitle("Frag vs Fresh") + ylim(c(1, 2.5)) + coord_flip() + xlab("")
+
+IVA <- dgn[["Cultured_Yes"]]
+IVA <- IVA[c(grep("ovary", IVA$Description), grep("Ovary", IVA$Description), grep("ovarian", IVA$Description),
+             grep("Ovarian", IVA$Description)),] %>% dplyr::arrange(NES)
+IVA$Description <- factor(IVA$Description, levels = IVA$Description)
+
+p2 <- ggplot(IVA, aes(x = Description, y = NES)) + geom_segment(aes(xend = Description, yend = 1)) + 
+  geom_point(aes(size = log10(p.adjust)), col = "#6dbf7d") +
+  theme_bw() + ggtitle("Frag + cIVA vs Fresh") + ylim(c(1, 3)) + coord_flip() + xlab("")
+
+p1 + p2
+
+```
+
+
 ## Heatmap for glycolysis genes
 
 ```{r Glycolysis gene heatmap}
@@ -949,7 +1000,6 @@ pheatmap(d1, cluster_rows = T, show_rownames = T,
 
 ```
 
-
 ## GO analysis
 
 ```{r GO analysis}
@@ -976,6 +1026,19 @@ dotplot(ego, showCategory = 50,  orderBy="GeneRatio") +
 
 ```
 
+## KEGG analysis
+
+```{r KEGG analysis}
+
+ego <- gseKEGG(GeneList[["Cultured_Yes"]], organism = "hsa", 
+               keyType = "kegg", pAdjustMethod = "BH", 
+               pvalueCutoff = 1)
+ego <- setReadable(ego, OrgDb = org.Hs.eg.db, keyType="ENTREZID")
+gseKEGG_df <- ego %>% as.data.frame()
+
+openxlsx::write.xlsx(enrich_GO_df, "/Users/tianyi.li.2/Desktop/STAT_ovary/results/tables/DESeq2_H1_removed_fresh_enrich_GO_20220708.xlsx")
+
+```
 
 ```{r Session info}
 sessionInfo()
